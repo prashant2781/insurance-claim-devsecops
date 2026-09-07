@@ -1,0 +1,10 @@
+title = "Insurance Claim Service Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "insurance-demo-secret"
+description = "Detects the harmless training secret used for pipeline failure testing"
+regex = '''INSURANCE_DEMO_SECRET_[A-Z0-9]{16}'''
+keywords = ["INSURANCE_DEMO_SECRET_"]
