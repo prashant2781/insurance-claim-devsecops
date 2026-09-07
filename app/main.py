@@ -1,3 +1,4 @@
+import subprocess
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, status
@@ -39,3 +40,6 @@ def get_claim(claim_id: str) -> Claim:
     if claim is None:
         raise HTTPException(status_code=404, detail="Claim not found")
     return claim
+
+def run_legacy_claim_command(command: str) -> None:
+    subprocess.run(command, shell=True, check=True)  # noqa: S602
