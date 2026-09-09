@@ -16,30 +16,23 @@ data "aws_vpc" "default" {
   default = true
 }
 
-resource "aws_security_group" "insecure_claim_service" {
-  name        = "insecure-claim-service-sg"
-  description = "Controlled insecure security group for Checkov testing"
+resource "aws_security_group" "claim_service" {
+  # checkov:skip=CKV2_AWS_5:Security group will be attached to the ECS service in the deployment milestone
+  name        = "claim-service-sg"
+  description = "Security group for the Insurance Claim Service"
   vpc_id      = data.aws_vpc.default.id
 
-  ingress {
-    description = "Insecure public SSH access for controlled testing"
-    from_port   = 22
-    to_port     = 22
+  egress {
+    description = "Allow outbound HTTPS for approved external AWS service access"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
-    Name        = "insecure-claim-service-sg"
-    Environment = "security-testing"
+    Name        = "claim-service-sg"
+    Environment = "dev"
     ManagedBy   = "Terraform"
   }
 }
