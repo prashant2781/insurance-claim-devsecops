@@ -86,6 +86,70 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+  container-security:
+    name: Container Build, Trivy Scan and SBOM
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+
+      - name: Build Docker image
+        run: |
+          docker build             --tag insurance-claim-service:${{ github.sha }}             .
+
+      - name: Verify hardened runtime container
+        run: |
+          docker run --rm \
+            insurance-claim-service:${{ github.sha }} \
+            python -c "import fastapi, uvicorn, pydantic; print('Application runtime imports passed')"
+
+          docker run --rm \
+            insurance-claim-service:${{ github.sha }} \
+            sh -c '
+              if command -v pip >/dev/null 2>&1; then
+                echo "ERROR: pip remains installed in runtime image"
+                exit 1
+              else
+                echo "PASS: pip is not installed in runtime image"
+              fi
+
+              if python -c "import setuptools" >/dev/null 2>&1; then
+                echo "ERROR: setuptools remains installed in runtime image"
+                exit 1
+              else
+                echo "PASS: setuptools is not installed in runtime image"
+              fi
+            '
+
+      - name: Scan container image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: insurance-claim-service:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          vuln-type: os,library
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: insurance-claim-service:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          exit-code: "0"
+
+      - name: Upload SBOM as pipeline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: insurance-claim-service-sbom-${{ github.sha }}
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
   code-quality-and-tests:
     name: Code Quality and Unit Tests
     runs-on: ubuntu-latest
