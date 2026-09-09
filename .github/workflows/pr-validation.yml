@@ -98,17 +98,28 @@ jobs:
         run: |
           docker build             --tag insurance-claim-service:${{ github.sha }}             .
 
-      - name: Verify installed container package versions
+      - name: Verify hardened runtime container
         run: |
           docker run --rm \
             insurance-claim-service:${{ github.sha }} \
+            python -c "import fastapi, uvicorn, pydantic; print('Application runtime imports passed')"
+
+          docker run --rm \
+            insurance-claim-service:${{ github.sha }} \
             sh -c '
-              for package in msgpack setuptools wheel jaraco.context; do
-                python -m pip show "$package" 2>/dev/null |
-                  grep -E "^(Name|Version):" ||
-                  echo "$package=NOT_INSTALLED"
-              done
-              python -m pip check
+              if command -v pip >/dev/null 2>&1; then
+                echo "ERROR: pip remains installed in runtime image"
+                exit 1
+              else
+                echo "PASS: pip is not installed in runtime image"
+              fi
+
+              if python -c "import setuptools" >/dev/null 2>&1; then
+                echo "ERROR: setuptools remains installed in runtime image"
+                exit 1
+              else
+                echo "PASS: setuptools is not installed in runtime image"
+              fi
             '
 
       - name: Scan container image for vulnerabilities

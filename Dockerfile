@@ -7,13 +7,10 @@ WORKDIR /app
 
 RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
 
-COPY requirements.txt constraints.txt ./
-RUN pip install --no-cache-dir --upgrade \
-      pip \
-      "setuptools==78.1.1" && \
-    pip install --no-cache-dir \
-      --constraint constraints.txt \
-      --requirement requirements.txt
+COPY requirements.txt ./
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir --requirement requirements.txt && \
+    python -m pip uninstall --yes pip setuptools
 
 COPY app ./app
 
