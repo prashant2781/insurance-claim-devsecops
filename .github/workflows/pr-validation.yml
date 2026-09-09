@@ -98,6 +98,19 @@ jobs:
         run: |
           docker build             --tag insurance-claim-service:${{ github.sha }}             .
 
+      - name: Verify installed container package versions
+        run: |
+          docker run --rm \
+            insurance-claim-service:${{ github.sha }} \
+            sh -c '
+              for package in msgpack setuptools wheel jaraco.context; do
+                python -m pip show "$package" 2>/dev/null |
+                  grep -E "^(Name|Version):" ||
+                  echo "$package=NOT_INSTALLED"
+              done
+              python -m pip check
+            '
+
       - name: Scan container image for vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
