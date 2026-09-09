@@ -8,10 +8,3 @@ id = "insurance-demo-secret"
 description = "Detects the harmless training secret used for pipeline failure testing"
 regex = '''INSURANCE_DEMO_SECRET_[A-Z0-9]{16}'''
 keywords = ["INSURANCE_DEMO_SECRET_"]
-
-[[allowlists]]
-description = "Allow the public SonarQube project identifier only"
-condition = "AND"
-paths = ['''^sonar-project\.properties$''']
-regexTarget = "match"
-regexes = ['''^sonar\.projectKey=prashant2781_insurance-claim-devsecops$''']
