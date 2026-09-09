@@ -44,6 +44,21 @@ jobs:
       - name: Scan Python source code with Bandit
         run: python -m bandit -c pyproject.toml -r app
 
+  checkov-iac:
+    name: Checkov Terraform IaC Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+
+      - name: Scan Terraform with Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          framework: terraform
+          compact: true
+
   code-quality-and-tests:
     name: Code Quality and Unit Tests
     runs-on: ubuntu-latest
