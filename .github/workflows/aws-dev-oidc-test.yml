@@ -1,0 +1,36 @@
+name: Test AWS DEV OIDC Authentication
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-aws-identity:
+    name: Verify Temporary AWS Credentials
+    runs-on: ubuntu-24.04
+    environment: dev
+
+    steps:
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_ROLE_ARN }}
+          aws-region: ap-south-1
+          role-session-name: insurance-claim-dev-oidc-test
+          mask-aws-account-id: true
+
+      - name: Verify assumed AWS identity
+        run: |
+          ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text)
+
+          echo "AWS temporary credentials configured successfully."
+
+          if [[ "$ROLE_ARN" != *"GitHubActionsDevDeployRole"* ]]; then
+            echo "ERROR: Unexpected AWS role was assumed."
+            exit 1
+          fi
+
+          echo "PASS: GitHubActionsDevDeployRole was assumed successfully."
