@@ -1,0 +1,157 @@
+name: Build and Push DEV Image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: insurance-claim-service-dev
+  LOCAL_IMAGE: insurance-claim-service
+
+jobs:
+  build-scan-and-push:
+    name: Build, Scan and Push DEV Image
+    runs-on: ubuntu-24.04
+    environment: dev
+
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@v6
+
+      - name: Build Docker image with commit SHA
+        run: |
+          docker build \
+            --pull \
+            --tag "${LOCAL_IMAGE}:${GITHUB_SHA}" \
+            .
+
+      - name: Verify hardened runtime container
+        run: |
+          docker run --rm \
+            "${LOCAL_IMAGE}:${GITHUB_SHA}" \
+            python -c "import fastapi, uvicorn, pydantic; print('Application runtime imports passed')"
+
+          docker run --rm \
+            "${LOCAL_IMAGE}:${GITHUB_SHA}" \
+            sh -c '
+              if command -v pip >/dev/null 2>&1; then
+                echo "ERROR: pip remains installed in runtime image"
+                exit 1
+              fi
+
+              if python -c "import setuptools" >/dev/null 2>&1; then
+                echo "ERROR: setuptools remains installed in runtime image"
+                exit 1
+              fi
+
+              echo "PASS: Hardened runtime verification completed"
+            '
+
+      - name: Scan image for HIGH and CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: insurance-claim-service:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          vuln-type: os,library
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: insurance-claim-service:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          exit-code: "0"
+
+      - name: Upload SBOM evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: insurance-claim-dev-sbom-${{ github.sha }}
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Configure temporary AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: insurance-claim-dev-ecr-push
+          mask-aws-account-id: true
+
+      - name: Verify assumed DEV role
+        run: |
+          ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text)
+
+          if [[ "$ROLE_ARN" != *"GitHubActionsDevDeployRole"* ]]; then
+            echo "ERROR: Unexpected AWS role was assumed"
+            exit 1
+          fi
+
+          echo "PASS: Expected DEV deployment role assumed"
+
+      - name: Login Docker client to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and push immutable image to DEV ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${GITHUB_SHA}"
+
+          docker tag \
+            "${LOCAL_IMAGE}:${GITHUB_SHA}" \
+            "${ECR_IMAGE}"
+
+          docker push "${ECR_IMAGE}"
+
+          echo "IMAGE_URI=${ECR_IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Capture immutable ECR image digest
+        run: |
+          IMAGE_DIGEST=$(aws ecr describe-images \
+            --repository-name "${ECR_REPOSITORY}" \
+            --image-ids imageTag="${GITHUB_SHA}" \
+            --region "${AWS_REGION}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          if [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" == "None" ]]; then
+            echo "ERROR: ECR image digest could not be retrieved"
+            exit 1
+          fi
+
+          echo "IMAGE_DIGEST=${IMAGE_DIGEST}" >> "$GITHUB_ENV"
+          echo "PASS: Immutable image digest captured"
+
+      - name: Write deployment metadata
+        run: |
+          cat > image-details.json <<METADATA
+          {
+            "gitCommit": "${GITHUB_SHA}",
+            "imageUri": "${IMAGE_URI}",
+            "imageDigest": "${IMAGE_DIGEST}",
+            "environment": "dev",
+            "awsRegion": "${AWS_REGION}"
+          }
+          METADATA
+
+      - name: Upload image metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: insurance-claim-dev-image-details-${{ github.sha }}
+          path: image-details.json
+          if-no-files-found: error
+          retention-days: 30
