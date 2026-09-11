@@ -34,15 +34,15 @@ jobs:
         working-directory: terraform/environments/dev
 
     steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@v6
+
       - name: Validate manual confirmation
         run: |
           if [[ "${{ inputs.confirmation }}" != "APPLY" ]]; then
             echo "ERROR: Confirmation must be exactly APPLY"
             exit 1
           fi
-
-      - name: Checkout exact source revision
-        uses: actions/checkout@v6
 
       - name: Configure temporary AWS credentials through OIDC
         uses: aws-actions/configure-aws-credentials@v6.2.4
