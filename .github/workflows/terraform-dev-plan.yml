@@ -1,0 +1,88 @@
+name: Terraform DEV Plan
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+
+jobs:
+  terraform-plan:
+    name: Generate DEV Terraform Plan
+    runs-on: ubuntu-24.04
+    environment: dev
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform/environments/dev
+
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@v6
+
+      - name: Configure temporary AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: insurance-claim-dev-terraform-plan
+          mask-aws-account-id: true
+
+      - name: Verify assumed DEV role
+        run: |
+          ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text)
+
+          if [[ "$ROLE_ARN" != *"GitHubActionsDevDeployRole"* ]]; then
+            echo "ERROR: Unexpected AWS role was assumed"
+            exit 1
+          fi
+
+          echo "PASS: Expected DEV Terraform role assumed"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.14.6"
+          terraform_wrapper: false
+
+      - name: Terraform formatting check
+        run: terraform fmt -check -recursive
+
+      - name: Initialize secure S3 backend
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -reconfigure
+
+      - name: Validate Terraform configuration
+        run: terraform validate
+
+      - name: Generate Terraform plan
+        run: |
+          terraform plan \
+            -no-color \
+            -out=tfplan
+
+      - name: Create human-readable plan
+        run: terraform show -no-color tfplan > tfplan.txt
+
+      - name: Upload Terraform plan evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: insurance-claim-dev-terraform-plan-${{ github.sha }}
+          path: |
+            terraform/environments/dev/tfplan
+            terraform/environments/dev/tfplan.txt
+          if-no-files-found: error
+          retention-days: 7
