@@ -1,0 +1,77 @@
+name: Terraform DEV Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type APPLY to create or update DEV infrastructure'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+  TF_VAR_container_image: ${{ vars.TF_VAR_container_image }}
+
+jobs:
+  terraform-apply:
+    name: Apply DEV Terraform Infrastructure
+    runs-on: ubuntu-24.04
+    environment: dev
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform/environments/dev
+
+    steps:
+      - name: Validate manual confirmation
+        run: |
+          if [[ "${{ inputs.confirmation }}" != "APPLY" ]]; then
+            echo "ERROR: Confirmation must be exactly APPLY"
+            exit 1
+          fi
+
+      - name: Checkout exact source revision
+        uses: actions/checkout@v6
+
+      - name: Configure temporary AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: insurance-claim-dev-terraform-apply
+          mask-aws-account-id: true
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.14.6"
+          terraform_wrapper: false
+
+      - name: Initialize secure S3 backend
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -reconfigure
+
+      - name: Validate Terraform configuration
+        run: terraform validate
+
+      - name: Generate saved Terraform plan
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Apply saved Terraform plan
+        run: terraform apply -auto-approve tfplan
+
+      - name: Display DEV deployment outputs
+        run: terraform output
