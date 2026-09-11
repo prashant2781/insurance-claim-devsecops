@@ -15,3 +15,8 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "container_image" {
+  description = "Immutable ECR image URI including the sha256 digest"
+  type        = string
+}
