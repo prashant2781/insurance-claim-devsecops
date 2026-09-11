@@ -1,0 +1,106 @@
+name: Terraform DEV Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DESTROY to remove DEV infrastructure'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+  TF_VAR_container_image: ${{ vars.TF_VAR_container_image }}
+
+jobs:
+  terraform-destroy:
+    name: Destroy DEV Terraform Infrastructure
+    runs-on: ubuntu-24.04
+    environment: dev
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform/environments/dev
+
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@v6
+
+      - name: Validate manual confirmation
+        run: |
+          if [[ "${{ inputs.confirmation }}" != "DESTROY" ]]; then
+            echo "ERROR: Confirmation must be exactly DESTROY"
+            exit 1
+          fi
+
+          echo "PASS: Explicit DESTROY confirmation received"
+
+      - name: Configure temporary AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: insurance-claim-dev-terraform-destroy
+          mask-aws-account-id: true
+
+      - name: Verify assumed DEV role
+        run: |
+          ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text)
+
+          if [[ "$ROLE_ARN" != *"GitHubActionsDevDeployRole"* ]]; then
+            echo "ERROR: Unexpected AWS role was assumed"
+            exit 1
+          fi
+
+          echo "PASS: Expected DEV deployment role assumed"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.14.6"
+          terraform_wrapper: false
+
+      - name: Initialize secure S3 backend
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -reconfigure
+
+      - name: Validate Terraform configuration
+        run: terraform validate
+
+      - name: Generate saved Terraform destroy plan
+        run: |
+          terraform plan \
+            -destroy \
+            -no-color \
+            -out=destroy.tfplan
+
+      - name: Display destroy plan summary
+        run: terraform show -no-color destroy.tfplan
+
+      - name: Apply saved Terraform destroy plan
+        run: terraform apply -auto-approve destroy.tfplan
+
+      - name: Verify DEV stack removal
+        run: |
+          REMAINING_RESOURCES=$(terraform state list)
+
+          if [[ -n "$REMAINING_RESOURCES" ]]; then
+            echo "ERROR: Terraform state still contains managed resources"
+            echo "$REMAINING_RESOURCES"
+            exit 1
+          fi
+
+          echo "PASS: DEV Terraform-managed infrastructure has been removed"
