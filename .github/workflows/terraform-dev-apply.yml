@@ -21,6 +21,7 @@ env:
   TF_IN_AUTOMATION: true
   TF_INPUT: false
   TF_VAR_container_image: ${{ vars.TF_VAR_container_image }}
+  TF_VAR_policy_container_image: ${{ vars.TF_VAR_policy_container_image }}
 
 jobs:
   terraform-apply:
