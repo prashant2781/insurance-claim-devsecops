@@ -9,6 +9,38 @@ permissions:
   contents: read
 
 jobs:
+  detect-changes:
+    name: Detect Changed Components
+    runs-on: ubuntu-latest
+
+    outputs:
+      claim-container: ${{ steps.filter.outputs.claim-container }}
+
+    steps:
+      - name: Checkout complete Git history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect Claim Service container changes
+        id: filter
+        shell: bash
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+
+          changed_files="$(
+            git diff               --name-only               "origin/${{ github.base_ref }}...${{ github.sha }}"
+          )"
+
+          echo "Changed files:"
+          echo "${changed_files}"
+
+          if echo "${changed_files}" | grep -Eq             '^(app/|tests/|Dockerfile$|\.dockerignore$|requirements[^/]*\.txt$|pyproject\.toml$)'; then
+            echo "claim-container=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "claim-container=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   secret-scanning:
     name: Gitleaks Secret Scan
     runs-on: ubuntu-latest
@@ -88,6 +120,8 @@ jobs:
 
   container-security:
     name: Container Build, Trivy Scan and SBOM
+    needs: detect-changes
+    if: needs.detect-changes.outputs.claim-container == 'true'
     runs-on: ubuntu-24.04
 
     steps:
