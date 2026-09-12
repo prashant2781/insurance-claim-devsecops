@@ -40,6 +40,10 @@ resource "aws_ecs_task_definition" "claim_service" {
         {
           name  = "APP_ENV"
           value = "dev"
+        },
+        {
+          name  = "ALLOWED_ORIGINS"
+          value = var.allowed_origins
         }
       ]
 
