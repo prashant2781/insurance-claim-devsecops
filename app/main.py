@@ -1,9 +1,23 @@
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Insurance Claim Service", version="1.0.0")
+
+DEV_PORTAL_ORIGIN = (
+    "http://insurance-portal-dev-335048986277-ap-south-1."
+    "s3-website.ap-south-1.amazonaws.com"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[DEV_PORTAL_ORIGIN],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 
 class ClaimCreate(BaseModel):
