@@ -57,7 +57,37 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "application/json"
+      message_body = "{\"detail\":\"Route not found\"}"
+      status_code  = "404"
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "claim_service" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 50
+
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.claim_service.arn
+  }
+
+  condition {
+    path_pattern {
+      values = [
+        "/health",
+        "/claims",
+        "/claims/*"
+      ]
+    }
+  }
+
+  tags = {
+    Name    = "${local.resource_prefix}-claim-routing"
+    Service = "claim-service"
   }
 }
