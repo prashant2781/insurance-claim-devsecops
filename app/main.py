@@ -5,6 +5,13 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from app.policy_client import (
+    PolicyInactiveError,
+    PolicyNotFoundError,
+    PolicyServiceUnavailableError,
+    validate_policy,
+)
+
 app = FastAPI(title="Insurance Claim Service", version="1.0.0")
 
 allowed_origins = [
@@ -44,6 +51,24 @@ def health() -> dict[str, str]:
 
 @app.post("/claims", response_model=Claim, status_code=status.HTTP_201_CREATED)
 def create_claim(request: ClaimCreate) -> Claim:
+    try:
+        validate_policy(request.policy_number)
+    except PolicyNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+    except PolicyInactiveError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+    except PolicyServiceUnavailableError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+
     claim = Claim(claim_id=str(uuid4()), **request.model_dump())
     claims[claim.claim_id] = claim
     return claim
