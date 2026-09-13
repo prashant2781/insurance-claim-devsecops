@@ -72,3 +72,21 @@ resource "aws_vpc_security_group_egress_rule" "ecs_dns_tcp" {
   to_port           = 53
   ip_protocol       = "tcp"
 }
+
+resource "aws_vpc_security_group_egress_rule" "alb_to_policy_ecs" {
+  security_group_id            = aws_security_group.alb.id
+  description                  = "Allow ALB traffic to Policy Service tasks on port 8000"
+  referenced_security_group_id = aws_security_group.ecs_tasks.id
+  from_port                    = 8000
+  to_port                      = 8000
+  ip_protocol                  = "tcp"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "policy_ecs_from_alb" {
+  security_group_id            = aws_security_group.ecs_tasks.id
+  description                  = "Allow Policy Service traffic only from the ALB"
+  referenced_security_group_id = aws_security_group.alb.id
+  from_port                    = 8000
+  to_port                      = 8000
+  ip_protocol                  = "tcp"
+}
