@@ -44,6 +44,10 @@ resource "aws_ecs_task_definition" "claim_service" {
         {
           name  = "ALLOWED_ORIGINS"
           value = var.allowed_origins
+        },
+        {
+          name  = "POLICY_SERVICE_URL"
+          value = "http://${aws_lb.claim_service.dns_name}"
         }
       ]
 
