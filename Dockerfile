@@ -5,7 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
+RUN apt-get update \
+    && apt-get upgrade --yes \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system appgroup \
+    && useradd --system --gid appgroup appuser
 
 COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir --upgrade pip && \

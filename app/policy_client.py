@@ -1,4 +1,6 @@
 import os
+import re
+from urllib.parse import quote
 
 import httpx
 
@@ -23,7 +25,15 @@ def validate_policy(policy_number: str) -> dict:
             "Policy Service URL is not configured"
         )
 
-    policy_url = f"{policy_service_url}/policies/{policy_number}"
+    if not re.fullmatch(r"POL-[A-Z0-9-]{3,26}", policy_number):
+        raise PolicyNotFoundError(
+            "Policy number format is invalid"
+        )
+
+    safe_policy_number = quote(policy_number, safe="")
+    policy_url = (
+        f"{policy_service_url}/policies/{safe_policy_number}"
+    )
 
     timeout = httpx.Timeout(
         connect=2.0,

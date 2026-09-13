@@ -146,3 +146,13 @@ def test_policy_connection_failure(monkeypatch) -> None:
         match="temporarily unavailable",
     ):
         policy_client.validate_policy("POL-10001")
+
+
+def test_rejects_policy_number_path_traversal(monkeypatch) -> None:
+    monkeypatch.setenv("POLICY_SERVICE_URL", POLICY_URL)
+
+    with pytest.raises(
+        PolicyNotFoundError,
+        match="Policy number format is invalid",
+    ):
+        policy_client.validate_policy("../../health")
